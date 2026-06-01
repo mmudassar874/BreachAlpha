@@ -14,16 +14,27 @@ import pandas as pd
 
 from .feature_engine import (
     BreachEvent,
+    classify_severity,
     compute_abnormal_returns_vec,
     compute_car_vec,
     compute_daily_returns,
     compute_recovery_time_vec,
     normalize_datetimelike_index,
-    compute_volatility_ratio_vec,
-    compute_volume_change_vec,
-    classify_severity,
-    AnalysisConfig,
 )
+
+BENCHMARK_NAMES = {
+    "^GSPC": "S&P 500",
+    "^IXIC": "NASDAQ Composite",
+    "^DJI": "Dow Jones Industrial Average",
+    "^FTSE": "FTSE 100",
+    "^N225": "Nikkei 225",
+    "^NSEI": "NIFTY 50",
+    "^BSESN": "BSE SENSEX",
+    "^HSI": "Hang Seng Index",
+    "^GDAXI": "DAX",
+    "^FCHI": "CAC 40",
+    "^STOXX50E": "EURO STOXX 50",
+}
 from .model import SEVERITY_LABELS, predict_severity
 
 
@@ -343,7 +354,7 @@ def generate_explanation(
         feature_contributions=feature_contributions,
         methodology=(
             "Event Study Methodology (MacKinlay, 1997) using Market-Adjusted Model. "
-            "Abnormal Return = Stock Return - Market Return (S&P 500). "
+            f"Abnormal Return = Stock Return - Market Return ({BENCHMARK_NAMES.get(event.benchmark, event.benchmark)}). "
             "Severity classified by CAR thresholds from academic literature. "
             "Risk Score = weighted probability sum across severity categories."
         ),

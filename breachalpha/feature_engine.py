@@ -32,6 +32,7 @@ class BreachEvent:
     breach_type: str
     stock_data: pd.DataFrame
     market_data: pd.DataFrame
+    benchmark: str = "^GSPC"
 
 
 @dataclass
