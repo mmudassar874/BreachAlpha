@@ -28,11 +28,11 @@ KNOWN_TICKERS: dict[str, str] = {
     "google": "GOOGL", "alphabet": "GOOGL", "meta": "META", "facebook": "META",
     "netflix": "NFLX", "nvidia": "NVDA", "amd": "AMD", "intel": "INTC",
     "cisco": "CSCO", "ibm": "IBM", "oracle": "ORCL", "salesforce": "CRM",
-    "sap": "SAP", "adobe": "ADBE", "spotify": "SPOT", "snap": "SNAP",
+    "spotify": "SPOT", "snap": "SNAP",
     "pinterest": "PINS", "robinhood": "HOOD", "coinbase": "COIN",
     "paypal": "PYPL", "block": "SQ", "shopify": "SHOP", "zoom": "ZM",
     "dell": "DELL", "hp": "HPQ", "qualcomm": "QCOM", "broadcom": "AVGO",
-    "ibm": "IBM", "accenture": "ACN", "infosys": "INFY", "wipro": "WIT",
+    "accenture": "ACN",
     "tech mahindra": "TECHM.ME", "hcl technologies": "HCLTECH.NS",
     "tata consultancy": "TCS.NS", "tcs": "TCS.NS",
 
@@ -150,9 +150,6 @@ KNOWN_TICKERS: dict[str, str] = {
     # Insurance
     "life insurance corporation": "LIC.NS", "lic": "LIC.NS",
     "sbi life insurance": "SBILIFE.NS", "icici prudential": "ICICIPRULI.NS",
-
-    # Indian IT (BSE tickers as fallback)
-    "tcs": "TCS.NS", "wipro": "WIT.NS", "infosys": "INFY.NS",
 
     # ── Chinese ──
     "alibaba": "BABA", "tencent": "TCEHY", "jd.com": "JD",

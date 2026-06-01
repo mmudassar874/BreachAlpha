@@ -6,22 +6,30 @@ Run with:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import re
 import tempfile
 import time
 from typing import Optional
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from cachetools import TTLCache
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
 
-# Simple in-memory cache for network search results: {query: (timestamp, results)}
-_search_cache: dict[str, tuple[float, list]] = {}
-_SEARCH_CACHE_TTL = 300  # 5 minutes
+# Bounded TTL cache for network search results (prevents memory DoS)
+_search_cache: TTLCache = TTLCache(maxsize=1000, ttl=300)
+
+# ── Security Constants ───────────────────────────────────────────────────
+_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+_TICKER_RE = re.compile(r"^[A-Z0-9.^]{1,15}$")
+_ADMIN_KEY = os.environ.get("BREACHALPHA_ADMIN_KEY", "")
 
 from .feature_engine import BreachEvent, compute_features, compute_features_batch, classify_severity, AnalysisConfig as FeatureConfig
 from .model import load_model, predict_severity, train_model, save_model, SEVERITY_LABELS
@@ -46,9 +54,73 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-Admin-Key"],
 )
+
+
+# ── Security Middleware ───────────────────────────────────────────────────
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add standard security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+
+class AdminAuthMiddleware(BaseHTTPMiddleware):
+    """Protect admin endpoints with X-Admin-Key header validation."""
+
+    ADMIN_PREFIXES = ("/api/train", "/api/data-sources/configure")
+    ADMIN_EXACT = {"/api/cache"}
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        is_admin = (
+            any(path.startswith(p) for p in self.ADMIN_PREFIXES)
+            or path in self.ADMIN_EXACT
+            or (path == "/api/cache" and request.method == "DELETE")
+        )
+        if is_admin and _ADMIN_KEY:
+            key = request.headers.get("X-Admin-Key", "")
+            if key != _ADMIN_KEY:
+                from starlette.responses import JSONResponse
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Invalid or missing X-Admin-Key header"},
+                )
+        return await call_next(request)
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(AdminAuthMiddleware)
+
+
+def _validate_ticker(ticker: str) -> str:
+    """Validate and normalize a ticker symbol. Raises HTTPException on invalid input."""
+    cleaned = ticker.strip().upper()
+    if not _TICKER_RE.match(cleaned):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid ticker format: '{ticker}'. Tickers must be 1-15 alphanumeric characters.",
+        )
+    return cleaned
+
+
+def _validate_breach_search_query(q: str) -> str:
+    """Validate breach search query to prevent injection/SSRF."""
+    q = q.strip()
+    if not q or len(q) < 2:
+        raise HTTPException(status_code=400, detail="Query must be at least 2 characters.")
+    if len(q) > 100:
+        raise HTTPException(status_code=400, detail="Query too long (max 100 characters).")
+    return q
 
 
 # ── Request / Response Models ─────────────────────────────────────────────
@@ -276,12 +348,15 @@ async def score_company(req: ScoreRequest):
             detail=f"Could not resolve ticker for '{req.company}'. Add mapping to data/ticker_overrides.json.",
         )
 
-    stock_data = fetch_stock_data(ticker, start="2015-01-01")
+    ticker = _validate_ticker(ticker)
+    benchmark = detect_benchmark(ticker)
+
+    stock_data, market_data = await asyncio.gather(
+        asyncio.to_thread(fetch_stock_data, ticker, "2015-01-01"),
+        asyncio.to_thread(fetch_market_data, "2015-01-01", benchmark),
+    )
     if stock_data.empty:
         raise HTTPException(status_code=404, detail=f"No stock data available for {ticker}")
-
-    benchmark = detect_benchmark(ticker)
-    market_data = fetch_market_data(start="2015-01-01", benchmark=benchmark)
 
     event = BreachEvent(
         company_name=req.company,
@@ -342,6 +417,8 @@ async def score_auto(req: ScoreRequest):
     if ticker is None:
         raise HTTPException(status_code=404, detail=f"Could not resolve ticker for '{req.company}'")
 
+    ticker = _validate_ticker(ticker)
+
     # Resolve company name from ticker for better search
     company_name = req.company
     try:
@@ -356,7 +433,7 @@ async def score_auto(req: ScoreRequest):
         pass
 
     # Search for breach incidents
-    incidents = search_breach_incidents(company_name, limit=5)
+    incidents = await asyncio.to_thread(search_breach_incidents, company_name, 5)
     breach_found = len(incidents) > 0
 
     if breach_found:
@@ -371,12 +448,14 @@ async def score_auto(req: ScoreRequest):
         breach_type = req.breach_type
         breach_confidence = 0.0
 
-    stock_data = fetch_stock_data(ticker, start="2015-01-01")
+    benchmark = detect_benchmark(ticker)
+
+    stock_data, market_data = await asyncio.gather(
+        asyncio.to_thread(fetch_stock_data, ticker, "2015-01-01"),
+        asyncio.to_thread(fetch_market_data, "2015-01-01", benchmark),
+    )
     if stock_data.empty:
         raise HTTPException(status_code=404, detail=f"No stock data for {ticker}")
-
-    benchmark = detect_benchmark(ticker)
-    market_data = fetch_market_data(start="2015-01-01", benchmark=benchmark)
 
     event = BreachEvent(
         company_name=company_name, ticker=ticker,
@@ -499,61 +578,65 @@ async def train_model_endpoint(req: TrainRequest):
 
     path = Path(req.data_path).resolve()
 
-    # Security: validate path is within allowed directories
+    # Security: validate path is within allowed directories (uses path canonical comparison)
     allowed_dirs = [
         (Path(__file__).parent.parent / "data").resolve(),
         (Path(__file__).parent.parent).resolve(),
     ]
-    if not any(str(path).startswith(str(d)) for d in allowed_dirs):
+    if not any(path.is_relative_to(d) for d in allowed_dirs):
         raise HTTPException(status_code=403, detail="Access denied: path outside allowed directories")
 
     if not path.exists():
         raise HTTPException(status_code=404, detail="Data file not found")
 
-    from .breach_loader import load_breaches
+    # Run entire training pipeline in thread to avoid blocking event loop
+    def _train_worker():
+        from .breach_loader import load_breaches
+        from .ticker_resolver import resolve_all, load_overrides
 
-    breaches = load_breaches(path)
-    from .ticker_resolver import resolve_all, load_overrides
+        breaches = load_breaches(path)
+        overrides = load_overrides()
+        resolutions = resolve_all(breaches["Name"].tolist(), overrides)
 
-    overrides = load_overrides()
-    resolutions = resolve_all(breaches["Name"].tolist(), overrides)
+        resolved = breaches[breaches["Name"].map(resolutions).notna()].copy()
+        resolved["ticker"] = resolved["Name"].map(resolutions)
 
-    resolved = breaches[breaches["Name"].map(resolutions).notna()].copy()
-    resolved["ticker"] = resolved["Name"].map(resolutions)
+        if len(resolved) < 20:
+            raise ValueError(f"Need at least 20 resolved companies to train (got {len(resolved)})")
 
-    if len(resolved) < 20:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Need at least 20 resolved companies to train (got {len(resolved)})",
-        )
+        market_data = fetch_market_data(start="2010-01-01")
+        features_list = []
 
-    market_data = fetch_market_data(start="2010-01-01")
-    features_list = []
+        for _, row in resolved.iterrows():
+            stock_data = fetch_stock_data(row["ticker"], start="2010-01-01")
+            if stock_data.empty:
+                continue
 
-    for _, row in resolved.iterrows():
-        stock_data = fetch_stock_data(row["ticker"], start="2010-01-01")
-        if stock_data.empty:
-            continue
+            event = BreachEvent(
+                company_name=row["Name"],
+                ticker=row["ticker"],
+                breach_date=row["BreachDate"],
+                pwn_count=int(row["PwnCount"]),
+                breach_type="data_leak",
+                stock_data=stock_data,
+                market_data=market_data,
+            )
+            features = compute_features(event)
+            if features is not None:
+                features_list.append(features.to_dict())
 
-        event = BreachEvent(
-            company_name=row["Name"],
-            ticker=row["ticker"],
-            breach_date=row["BreachDate"],
-            pwn_count=int(row["PwnCount"]),
-            breach_type="data_leak",
-            stock_data=stock_data,
-            market_data=market_data,
-        )
-        features = compute_features(event)
-        if features is not None:
-            features_list.append(features.to_dict())
+        if not features_list:
+            raise ValueError("No features could be computed")
 
-    if not features_list:
-        raise HTTPException(status_code=422, detail="No features could be computed")
+        df = pd.DataFrame(features_list)
+        result = train_model(df)
+        save_model(result["model"], result["metrics"])
+        return result
 
-    df = pd.DataFrame(features_list)
-    result = train_model(df)
-    save_model(result["model"], result["metrics"])
+    try:
+        result = await asyncio.to_thread(_train_worker)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     return TrainResponse(
         status="ok",
@@ -598,15 +681,25 @@ async def upload_dataset(file: UploadFile = File(...)):
             detail=f"Unsupported file type: {suffix}. Allowed: {', '.join(allowed_types)}",
         )
 
-    # Save uploaded file to temp location
+    # Save uploaded file to temp location with size limit
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            content = await file.read()
-            tmp.write(content)
+            total_size = 0
+            while True:
+                chunk = await file.read(8192)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > _MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum upload size is {_MAX_UPLOAD_BYTES // (1024*1024)} MB.",
+                    )
+                tmp.write(chunk)
             tmp_path = tmp.name
 
-        result = preprocess_dataset(tmp_path)
+        result = await asyncio.to_thread(preprocess_dataset, tmp_path)
         return UploadResponse(
             success=result.success,
             original_rows=result.original_rows,
@@ -640,17 +733,25 @@ async def upload_and_analyze(file: UploadFile = File(...)):
             detail=f"Unsupported file type: {suffix}. Allowed: {', '.join(allowed_types)}",
         )
 
-    # Read file content
-    content = await file.read()
-
-    # Save to temp file
+    # Read file content with size limit
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(content)
+            total_size = 0
+            while True:
+                chunk = await file.read(8192)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > _MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum upload size is {_MAX_UPLOAD_BYTES // (1024*1024)} MB.",
+                    )
+                tmp.write(chunk)
             tmp_path = tmp.name
 
-        result = preprocess_dataset(tmp_path)
+        result = await asyncio.to_thread(preprocess_dataset, tmp_path)
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
@@ -750,12 +851,15 @@ async def explain_score(req: ExplainRequest):
             detail=f"Could not resolve ticker for '{req.company}'",
         )
 
-    stock_data = fetch_stock_data(ticker, start="2015-01-01")
+    ticker = _validate_ticker(ticker)
+    benchmark = detect_benchmark(ticker)
+
+    stock_data, market_data = await asyncio.gather(
+        asyncio.to_thread(fetch_stock_data, ticker, "2015-01-01"),
+        asyncio.to_thread(fetch_market_data, "2015-01-01", benchmark),
+    )
     if stock_data.empty:
         raise HTTPException(status_code=404, detail=f"No stock data for {ticker}")
-
-    benchmark = detect_benchmark(ticker)
-    market_data = fetch_market_data(start="2015-01-01", benchmark=benchmark)
 
     event = BreachEvent(
         company_name=req.company,
@@ -806,6 +910,8 @@ async def explain_auto(req: ScoreRequest):
     if ticker is None:
         raise HTTPException(status_code=404, detail=f"Could not resolve ticker for '{req.company}'")
 
+    ticker = _validate_ticker(ticker)
+
     company_name = req.company
     try:
         from .ticker_resolver import KNOWN_TICKERS
@@ -818,7 +924,7 @@ async def explain_auto(req: ScoreRequest):
     except Exception:
         pass
 
-    incidents = search_breach_incidents(company_name, limit=5)
+    incidents = await asyncio.to_thread(search_breach_incidents, company_name, 5)
     if incidents:
         top = max(incidents, key=lambda x: (x.records_affected, x.confidence))
         breach_date = top.date if top.date else req.breach_date
@@ -829,12 +935,14 @@ async def explain_auto(req: ScoreRequest):
         records = req.records_affected
         breach_type = req.breach_type
 
-    stock_data = fetch_stock_data(ticker, start="2015-01-01")
+    benchmark = detect_benchmark(ticker)
+
+    stock_data, market_data = await asyncio.gather(
+        asyncio.to_thread(fetch_stock_data, ticker, "2015-01-01"),
+        asyncio.to_thread(fetch_market_data, "2015-01-01", benchmark),
+    )
     if stock_data.empty:
         raise HTTPException(status_code=404, detail=f"No stock data for {ticker}")
-
-    benchmark = detect_benchmark(ticker)
-    market_data = fetch_market_data(start="2015-01-01", benchmark=benchmark)
 
     event = BreachEvent(
         company_name=company_name, ticker=ticker,
@@ -1120,14 +1228,13 @@ async def search_ticker(q: str = "", limit: int = 10):
         return {"query": query, "results": local_results[:limit], "count": len(local_results)}
 
     # --- Phase 2: Network fallback for unknown queries (cached) ---
-    now = time.time()
     cached = _search_cache.get(query_lower)
-    if cached and (now - cached[0]) < _SEARCH_CACHE_TTL:
-        network_results = cached[1]
+    if cached is not None:
+        network_results = cached
     else:
         from .ticker_search import smart_resolve
-        network_results = smart_resolve(query, limit=limit)
-        _search_cache[query_lower] = (now, network_results)
+        network_results = await asyncio.to_thread(smart_resolve, query, limit)
+        _search_cache[query_lower] = network_results
 
     for r in network_results:
         ticker = r.get("ticker_full", r.get("symbol", ""))
@@ -1147,10 +1254,10 @@ async def search_breach(q: str = "", limit: int = 5):
     """
     from .breach_search import search_breach_incidents
 
-    if not q or len(q.strip()) < 2:
-        return {"query": q, "incidents": [], "count": 0}
+    q = _validate_breach_search_query(q)
+    limit = max(1, min(limit, 20))
 
-    incidents = search_breach_incidents(q.strip(), limit=limit)
+    incidents = await asyncio.to_thread(search_breach_incidents, q, limit)
 
     return {
         "query": q,
@@ -1298,12 +1405,15 @@ async def score_with_config(req: ScoreRequest, config: AnalysisConfigRequest = N
     if ticker is None:
         raise HTTPException(status_code=404, detail=f"Could not resolve ticker for '{req.company}'")
 
-    stock_data = fetch_stock_data(ticker, start=config.start_date)
+    ticker = _validate_ticker(ticker)
+    benchmark = detect_benchmark(ticker)
+
+    stock_data, market_data = await asyncio.gather(
+        asyncio.to_thread(fetch_stock_data, ticker, config.start_date),
+        asyncio.to_thread(fetch_market_data, config.start_date, benchmark),
+    )
     if stock_data.empty:
         raise HTTPException(status_code=404, detail=f"No stock data available for {ticker}")
-
-    benchmark = detect_benchmark(ticker)
-    market_data = fetch_market_data(start=config.start_date, benchmark=benchmark)
 
     feature_config = FeatureConfig(
         estimation_window=config.estimation_window,
@@ -1371,8 +1481,18 @@ async def upload_with_config(file: UploadFile = File(...), config: UploadConfigR
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            content = await file.read()
-            tmp.write(content)
+            total_size = 0
+            while True:
+                chunk = await file.read(8192)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > _MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum upload size is {_MAX_UPLOAD_BYTES // (1024*1024)} MB.",
+                    )
+                tmp.write(chunk)
             tmp_path = tmp.name
 
         preprocess_config = PreprocessConfig(
@@ -1385,7 +1505,7 @@ async def upload_with_config(file: UploadFile = File(...), config: UploadConfigR
             skip_ticker_resolution=config.skip_ticker_resolution,
             max_rows=config.max_rows,
         )
-        result = preprocess_dataset(tmp_path, preprocess_config)
+        result = await asyncio.to_thread(preprocess_dataset, tmp_path, preprocess_config)
         return UploadResponse(
             success=result.success, original_rows=result.original_rows,
             cleaned_rows=result.cleaned_rows, columns_detected=result.columns_detected,
@@ -1416,8 +1536,18 @@ async def upload_analyze_with_config(file: UploadFile = File(...), config: Uploa
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            content = await file.read()
-            tmp.write(content)
+            total_size = 0
+            while True:
+                chunk = await file.read(8192)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > _MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum upload size is {_MAX_UPLOAD_BYTES // (1024*1024)} MB.",
+                    )
+                tmp.write(chunk)
             tmp_path = tmp.name
 
         preprocess_config = PreprocessConfig(
@@ -1430,7 +1560,7 @@ async def upload_analyze_with_config(file: UploadFile = File(...), config: Uploa
             skip_ticker_resolution=config.skip_ticker_resolution,
             max_rows=config.max_rows,
         )
-        result = preprocess_dataset(tmp_path, preprocess_config)
+        result = await asyncio.to_thread(preprocess_dataset, tmp_path, preprocess_config)
     except HTTPException:
         raise
     except Exception as e:

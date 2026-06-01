@@ -702,15 +702,19 @@ class DataFetcher:
         return count
 
 
-# ── Singleton instance ──────────────────────────────────────────────────
+# ── Singleton instance (thread-safe) ──────────────────────────────────────
+
+import threading
 
 _default_fetcher: Optional[DataFetcher] = None
+_fetcher_lock = threading.Lock()
 
 
 def get_fetcher(alpha_vantage_key: str = "") -> DataFetcher:
-    """Get or create the default fetcher instance."""
+    """Get or create the default fetcher instance (thread-safe)."""
     global _default_fetcher
-    if _default_fetcher is None or (alpha_vantage_key and _default_fetcher.config.alpha_vantage_key != alpha_vantage_key):
-        config = FetcherConfig(alpha_vantage_key=alpha_vantage_key)
-        _default_fetcher = DataFetcher(config)
-    return _default_fetcher
+    with _fetcher_lock:
+        if _default_fetcher is None or (alpha_vantage_key and _default_fetcher.config.alpha_vantage_key != alpha_vantage_key):
+            config = FetcherConfig(alpha_vantage_key=alpha_vantage_key)
+            _default_fetcher = DataFetcher(config)
+        return _default_fetcher
