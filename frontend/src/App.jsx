@@ -353,7 +353,7 @@ function SettingsPanel({ config, setConfig, presets, onLoadPresets }) {
   )
 }
 
-function ScoreForm({ onScore, loading }) {
+function ScoreForm({ onScore, onExplain, loading }) {
   const [company, setCompany] = useState('')
   const [breachType, setBreachType] = useState('data_leak')
   const [records, setRecords] = useState('1000000')
@@ -368,27 +368,32 @@ function ScoreForm({ onScore, loading }) {
   const [breachError, setBreachError] = useState('')
   const searchCache = useRef({})
   const debounceRef = useRef(null)
+  const abortRef = useRef(null)
   const searchRef = useRef(null)
   const [activeIdx, setActiveIdx] = useState(-1)
 
   const searchTicker = useCallback(async (query) => {
-    if (query.length < 2) { setSearchResults([]); return }
+    if (query.length < 2) { setSearchResults([]); setSearching(false); return }
     const cacheKey = query.toLowerCase()
     if (searchCache.current[cacheKey]) {
       setSearchResults(searchCache.current[cacheKey])
       setShowSearch(true)
+      setSearching(false)
       return
     }
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setSearching(true)
     try {
-      const res = await fetch(`${API}/search?q=${encodeURIComponent(query)}&limit=5`)
+      const res = await fetch(`${API}/search?q=${encodeURIComponent(query)}&limit=5`, { signal: controller.signal })
       const data = await res.json()
       const results = data.results || []
       searchCache.current[cacheKey] = results
       setSearchResults(results)
       setShowSearch(results.length > 0)
-    } catch { setSearchResults([]) }
-    setSearching(false)
+    } catch (e) { if (e.name !== 'AbortError') setSearchResults([]) }
+    if (!controller.signal.aborted) setSearching(false)
   }, [])
 
   const searchBreaches = async (companyName) => {
@@ -417,13 +422,18 @@ function ScoreForm({ onScore, loading }) {
     setCompany(val)
     setValidationError('')
     clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => searchTicker(val), 250)
+    if (val.length < 2) { setSearchResults([]); setSearching(false); return }
+    setSearching(true)
+    debounceRef.current = setTimeout(() => searchTicker(val), 300)
   }
 
   const selectResult = (result) => {
+    if (abortRef.current) abortRef.current.abort()
+    clearTimeout(debounceRef.current)
     setCompany(result.ticker_full || result.symbol)
     setShowSearch(false)
     setSearchResults([])
+    setSearching(false)
     setActiveIdx(-1)
   }
 
@@ -471,8 +481,21 @@ function ScoreForm({ onScore, loading }) {
           )}
         </div>
         {validationError && <p id="company-error" className="text-xs text-red-400 mt-1" role="alert">{validationError}</p>}
-        {showSearch && searchResults.length > 0 && (
+        {showSearch && (
           <div ref={searchRef} className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600/60 rounded-lg shadow-xl max-h-60 overflow-y-auto" role="listbox" aria-label="Search results">
+            {searching && searchResults.length === 0 && (
+              <div className="p-2 space-y-1.5">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="flex items-center gap-2.5 px-2 py-1.5">
+                    <Skeleton className="h-4 w-16 rounded" />
+                    <Skeleton className="h-3 flex-1 rounded" />
+                  </div>
+                ))}
+              </div>
+            )}
+            {!searching && searchResults.length === 0 && company.length >= 2 && (
+              <div className="px-3 py-2.5 text-xs text-slate-500 text-center">No results found</div>
+            )}
             {searchResults.map((r, i) => (
               <button key={i} type="button" role="option" aria-selected={i === activeIdx} onClick={() => selectResult(r)}
                 className={cn('w-full px-3 py-2 text-left transition-colors border-b border-slate-700/30 last:border-0',
@@ -956,8 +979,8 @@ function DemoCard({ demo, onClick, onExplain }) {
           <span className="text-xs text-slate-500">Risk Score</span>
           <div className="flex items-center gap-2.5">
             <span className="text-lg font-bold" style={{ color: SEVERITY_COLORS[demo.prediction] }}>{demo.risk_score}</span>
-            <button onClick={(e) => { e.stopPropagation(); onExplain(demo) }}
-              className="text-xs text-blue-400 hover:text-blue-300 transition-colors" title="Explain this score">Explain</button>
+                      <button onClick={(e) => { e.stopPropagation(); onExplain(demo.ticker || demo.company) }}
+                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors" title="Explain this score">Explain</button>
           </div>
         </div>
       )}
@@ -1210,15 +1233,12 @@ function App() {
     setLoading(false)
   }
 
-  const handleExplain = async (demo) => {
+  const handleAutoExplain = async (ticker) => {
     setExplainLoading(true); setError(null); setExplainData(null)
     try {
-      const res = await fetch(`${API}/explain`, {
+      const res = await fetch(`${API}/explain/auto`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          company: demo.company, breach_type: demo.breach_type || 'data_leak',
-          records_affected: demo.pwn_count, breach_date: demo.breach_date,
-        }),
+        body: JSON.stringify({ company: ticker }),
       })
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail) }
       setExplainData(await res.json())
@@ -1300,7 +1320,7 @@ function App() {
                     </svg>
                     Analyze a Company
                   </h3>
-                  <ScoreForm onScore={handleScore} loading={loading} />
+                  <ScoreForm onScore={handleScore} onExplain={handleAutoExplain} loading={loading} />
                 </div>
 
                 <div className="card p-5">
@@ -1340,7 +1360,7 @@ function App() {
                       </div>
                     )}
                     {demos.map((d, i) => (
-                      <DemoCard key={i} demo={d} onClick={handleDemoClick} onExplain={handleExplain} />
+                      <DemoCard key={i} demo={d} onClick={handleDemoClick} onExplain={handleAutoExplain} />
                     ))}
                   </div>
                 </div>
@@ -1385,9 +1405,20 @@ function App() {
                           <h3 className="text-xl font-bold text-white">{score.company}</h3>
                           <span className="text-sm text-slate-500">{score.ticker}</span>
                         </div>
-                        <span className={cn('tag text-xs', SEVERITY_BG[score.prediction] || 'bg-slate-700/50 text-slate-400 border border-slate-700')}>
-                          {score.prediction?.toUpperCase() || 'N/A'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleAutoExplain(score.ticker || score.company)}
+                            disabled={explainLoading}
+                            className="btn btn-secondary text-xs py-1 px-2.5">
+                            {explainLoading ? (
+                              <><div className="animate-spin w-2.5 h-2.5 border-2 border-blue-400 border-t-transparent rounded-full" /> Loading</>
+                            ) : (
+                              <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg> Explain</>
+                            )}
+                          </button>
+                          <span className={cn('tag text-xs', SEVERITY_BG[score.prediction] || 'bg-slate-700/50 text-slate-400 border border-slate-700')}>
+                            {score.prediction?.toUpperCase() || 'N/A'}
+                          </span>
+                        </div>
                       </div>
                       <RiskGauge score={score.risk_score} prediction={score.prediction} />
                     </div>
@@ -1477,7 +1508,7 @@ function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
                   <h3>No Explanation Yet</h3>
-                  <p>Go to "Single Analysis", load a demo, and click "Explain" to see the full calculation breakdown.</p>
+                  <p>Search a ticker in "Single Analysis" and click "Explain" next to the risk score, or load a demo and click "Explain" on any card.</p>
                 </div>
               )}
               {explainData && <ExplainabilityPanel data={explainData} />}
