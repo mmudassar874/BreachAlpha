@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+import time
 from typing import Optional
 
 import numpy as np
@@ -17,6 +18,10 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+# Simple in-memory cache for network search results: {query: (timestamp, results)}
+_search_cache: dict[str, tuple[float, list]] = {}
+_SEARCH_CACHE_TTL = 300  # 5 minutes
 
 from .feature_engine import BreachEvent, compute_features, compute_features_batch, classify_severity, AnalysisConfig as FeatureConfig
 from .model import load_model, predict_severity, train_model, save_model, SEVERITY_LABELS
@@ -1052,39 +1057,76 @@ async def test_data_source(source_name: str, ticker: str = "MSFT"):
 
 @app.get("/api/search")
 async def search_ticker(q: str = "", limit: int = 10):
-    """Search for stock tickers from the internet.
+    """Search for stock tickers — instant local match first, network fallback.
 
     Supports company names (e.g., "Reliance"), partial tickers (e.g., "VEDL"),
-    or full tickers (e.g., "MSFT"). Searches Yahoo Finance + NSE India.
+    or full tickers (e.g., "MSFT"). Local KNOWN_TICKERS dict is searched first
+    (instant), then Yahoo Finance + NSE India as fallback.
     """
-    from .ticker_search import smart_resolve, verify_ticker
+    from .ticker_resolver import KNOWN_TICKERS
 
     if not q or len(q.strip()) < 1:
         return {"query": q, "results": [], "count": 0}
 
-    results = smart_resolve(q.strip(), limit=limit)
+    query = q.strip()
+    query_lower = query.lower()
 
-    # Verify top results have live data
-    verified = []
-    for r in results[:5]:
+    # --- Phase 1: Instant local match against KNOWN_TICKERS ---
+    local_results = []
+    seen = set()
+
+    # Exact name match
+    if query_lower in KNOWN_TICKERS and KNOWN_TICKERS[query_lower]:
+        ticker = KNOWN_TICKERS[query_lower]
+        local_results.append({"symbol": ticker, "name": query.title(), "ticker_full": ticker, "source": "local"})
+        seen.add(ticker)
+
+    # Partial name match
+    if len(local_results) < limit:
+        for name, ticker in KNOWN_TICKERS.items():
+            if not ticker or ticker in seen:
+                continue
+            if query_lower in name or name.startswith(query_lower):
+                local_results.append({"symbol": ticker, "name": name.title(), "ticker_full": ticker, "source": "local"})
+                seen.add(ticker)
+                if len(local_results) >= limit:
+                    break
+
+    # Bare ticker match (user typed "MSFT", "TCS", etc.)
+    if len(local_results) < limit:
+        query_upper = query.upper()
+        for name, ticker in KNOWN_TICKERS.items():
+            if not ticker or ticker in seen:
+                continue
+            bare = ticker.split(".")[0]
+            if query_upper == bare or query_upper == ticker:
+                local_results.append({"symbol": ticker, "name": name.title(), "ticker_full": ticker, "source": "local"})
+                seen.add(ticker)
+                if len(local_results) >= limit:
+                    break
+
+    # If we have enough local results, return immediately (no network)
+    if len(local_results) >= limit:
+        return {"query": query, "results": local_results[:limit], "count": len(local_results)}
+
+    # --- Phase 2: Network fallback for unknown queries (cached) ---
+    now = time.time()
+    cached = _search_cache.get(query_lower)
+    if cached and (now - cached[0]) < _SEARCH_CACHE_TTL:
+        network_results = cached[1]
+    else:
+        from .ticker_search import smart_resolve
+        network_results = smart_resolve(query, limit=limit)
+        _search_cache[query_lower] = (now, network_results)
+
+    for r in network_results:
         ticker = r.get("ticker_full", r.get("symbol", ""))
-        info = verify_ticker(ticker)
-        if info:
-            r["verified"] = True
-            r["price"] = info.get("price")
-            r["currency"] = info.get("currency")
-        else:
-            r["verified"] = False
-        verified.append(r)
+        if ticker and ticker not in seen:
+            r["source"] = "network"
+            local_results.append(r)
+            seen.add(ticker)
 
-    # Add remaining unverified results
-    verified.extend(results[5:])
-
-    return {
-        "query": q,
-        "results": verified[:limit],
-        "count": len(verified),
-    }
+    return {"query": query, "results": local_results[:limit], "count": len(local_results)}
 
 
 @app.get("/api/breach-search")
