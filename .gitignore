@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Data (large files, cache)
+data/stock_cache/*.csv
+data/stock_cache/*.json
+!data/stock_cache/.gitkeep
+
+# Models (trained artifacts)
+models/*.json
+models/*.pkl
+models/*.joblib
+models/*.bin
+!models/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets / Config
+.env
+.env.*
+config_local.*
