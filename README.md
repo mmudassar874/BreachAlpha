@@ -55,19 +55,20 @@ Run [LM Studio](https://lmstudio.ai/) on `192.168.56.1:1234` with a chat model (
 |--------|----------|-------------|
 | GET | `/api/health` | Health check + model status |
 | POST | `/api/score` | Score a single company |
+| POST | `/api/score/config` | Score with custom analysis config |
 | GET | `/api/search` | Search stock tickers from internet |
 | GET | `/api/breach-search` | Search breach incidents from internet |
 | GET | `/api/demo` | Run demo with 3 famous breaches |
-| POST | `/api/train` | Train model on breach CSV data |
+| POST | `/api/train` | Train model on breach CSV data (admin) |
 | POST | `/api/upload` | Upload & preprocess a dataset (CSV/XLSX/Excel) |
 | POST | `/api/upload/analyze` | Upload dataset + batch analyze all breaches |
 | POST | `/api/explain` | Full explainability report with calculation steps |
 | GET | `/api/config/presets` | Analysis configuration presets |
 | GET | `/api/data-sources` | Data source status |
-| POST | `/api/data-sources/configure` | Configure data sources |
+| POST | `/api/data-sources/configure` | Configure data sources (admin) |
 | GET | `/api/data-sources/test/{source}` | Test a data source |
 | GET | `/api/cache` | Stock cache info |
-| DELETE | `/api/cache` | Clear stock cache |
+| DELETE | `/api/cache` | Clear stock cache (admin) |
 | GET | `/api/llm/status` | LLM availability check |
 | POST | `/api/llm/analyze-dataset` | LLM dataset analysis |
 | POST | `/api/llm/risk-summary` | LLM risk summary |
@@ -138,6 +139,15 @@ The analysis pipeline (`/api/upload/analyze`) uses parallel processing for speed
 - **Event loop:** Full pipeline runs in `asyncio.to_thread()` — doesn't block other requests
 
 Expected speedup: ~4x for 10-row datasets, ~7x for 50 rows, ~10x for 200 rows.
+
+## Security
+
+Admin endpoints (`/api/train`, `/api/data-sources/configure`, `DELETE /api/cache`) require the `BREACHALPHA_ADMIN_KEY` environment variable. When not set, these endpoints return **503 Service Unavailable**.
+
+```bash
+export BREACHALPHA_ADMIN_KEY="your-secret-key"
+# Then pass via header: X-Admin-Key: your-secret-key
+```
 
 ## Methodology
 

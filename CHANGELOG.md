@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.1] — 2026-06-01
+
+### Fixed
+- **security**: Admin endpoints (`/api/train`, `/api/data-sources/configure`, `DELETE /api/cache`) now return 503 when `BREACHALPHA_ADMIN_KEY` is not set (previously bypassed auth entirely)
+- **security**: Admin key comparison uses `hmac.compare_digest()` for timing-safe comparison
+- **frontend**: Settings config (benchmark, windows, thresholds) now sent to `/api/score/config` (was silently ignored)
+- **frontend**: Removed unused `chart.js` + `react-chartjs-2` (~200KB)
+- **frontend**: Removed unused Radix UI packages (dialog, dropdown-menu, scroll-area, tooltip)
+- **frontend**: Removed `lucide-react`, replaced 2 icons with inline SVGs
+
 ## [0.3.0] — 2026-06-01
 
 ### Added
