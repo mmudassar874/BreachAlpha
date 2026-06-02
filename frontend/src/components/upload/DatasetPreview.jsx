@@ -6,7 +6,7 @@ export function DatasetPreview({ data }) {
       <h4 className="text-xs font-semibold tracking-wider uppercase mb-4 font-mono text-dim">
         Dataset Preview
       </h4>
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         {[
           { label: 'Original Rows', value: data.original_rows, color: 'text-foreground' },
           { label: 'Cleaned Rows', value: data.cleaned_rows, color: 'text-emerald-400' },

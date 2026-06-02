@@ -57,7 +57,7 @@ export function ExplainabilityPanel({ data }) {
                 <div className="rounded-lg p-3 mb-2 text-xs overflow-x-auto bg-background border border-border font-mono text-cyan">
                   {step.formula}
                 </div>
-                <div className="grid grid-cols-2 gap-2 mb-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                   {Object.entries(step.inputs).map(([key, val]) => (
                     <div key={key} className="text-xs">
                       <span className="text-secondary-foreground">{key}: </span>

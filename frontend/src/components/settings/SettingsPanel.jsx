@@ -124,7 +124,7 @@ export function SettingsPanel({ config, setConfig, presets, onLoadPresets }) {
             {presets.length === 0 ? (
               <p className="text-xs text-secondary-foreground py-2">No presets available.</p>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {presets.map((p) => (
                   <button
                     key={p.name}
@@ -157,7 +157,7 @@ export function SettingsPanel({ config, setConfig, presets, onLoadPresets }) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-foreground mb-1.5 block font-sans">
                   Stock Data Start
@@ -224,7 +224,7 @@ export function SettingsPanel({ config, setConfig, presets, onLoadPresets }) {
               <h4 className="text-xs font-semibold text-dim pt-1">
                 Severity Thresholds
               </h4>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {THRESHOLDS.map(({ label, key }) => (
                   <div key={key}>
                     <label className="text-sm font-medium text-foreground mb-1.5 block font-sans">
@@ -343,7 +343,7 @@ export function SettingsPanel({ config, setConfig, presets, onLoadPresets }) {
               onChange={(e) => setTestTicker(e.target.value)}
               className="mb-3"
             />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {['auto', 'yfinance', 'alphavantage', 'nse_india', 'yahoo_scrape'].map((src) => (
                 <button
                   key={src}

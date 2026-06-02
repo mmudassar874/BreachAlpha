@@ -310,7 +310,7 @@ export function ScoreForm({ onScore, loading }) {
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label htmlFor="breach-type" className="text-sm font-medium text-foreground mb-1.5 block font-sans">Breach Type</label>
           <Select id="breach-type" value={breachType} onValueChange={setBreachType}>

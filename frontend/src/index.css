@@ -94,6 +94,7 @@
   body {
     @apply bg-background font-mono text-[13px] leading-relaxed overflow-x-hidden;
     color: var(--text-primary);
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* Ambient gradient mesh background */
@@ -143,6 +144,18 @@
     @apply outline-ring outline-2 outline-offset-2;
   }
   :focus:not(:focus-visible) { outline: none; }
+
+  /* Mobile tap targets */
+  button, a, [role="button"], input, select, textarea {
+    touch-action: manipulation;
+  }
+
+  /* Floating donate button safe-area */
+  @supports (padding: env(safe-area-inset-bottom)) {
+    .fixed.bottom-4, .fixed.bottom-5, .fixed.bottom-6 {
+      bottom: calc(1rem + env(safe-area-inset-bottom)) !important;
+    }
+  }
 }
 
 /* ═══ Terminal View Components ═════════════════════════════════════════ */
