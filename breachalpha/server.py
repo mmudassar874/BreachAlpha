@@ -725,7 +725,7 @@ async def test_data_source(request: Request, source_name: str, ticker: str = "MS
         import time
         start_time = time.time()
         try:
-            df = fetcher.fetch(ticker, start="2024-01-01")
+            df = await asyncio.to_thread(fetcher.fetch, ticker, start="2024-01-01")
         except Exception as e:
             return {
                 "source": "auto (fallback chain)",
@@ -771,7 +771,7 @@ async def test_data_source(request: Request, source_name: str, ticker: str = "MS
     try:
         import time
         start_time = time.time()
-        df = source.fetch(ticker, start="2024-01-01")
+        df = await asyncio.to_thread(source.fetch, ticker, start="2024-01-01")
         elapsed = time.time() - start_time
 
         return {
@@ -907,7 +907,7 @@ async def llm_status(request: Request):
     """Check if LM Studio / LLM is available."""
     from .llm_integration import check_lm_studio, LLMConfig
     config = LLMConfig()
-    status = check_lm_studio(config)
+    status = await asyncio.to_thread(check_lm_studio, config)
     return {
         "available": status["available"],
         "url": status["url"],
@@ -927,7 +927,7 @@ async def llm_analyze_dataset(request: Request, req: LLMAnalysisRequest):
     if req.model:
         config.model = req.model
 
-    result = analyze_breach_dataset(
+    result = await asyncio.to_thread(analyze_breach_dataset,
         dataset_summary=req.dataset_summary,
         analysis_results=req.analysis_results,
         config=config,
@@ -949,7 +949,7 @@ async def llm_risk_summary(request: Request, req: LLMRiskRequest):
     from .llm_integration import generate_risk_summary, LLMConfig
 
     config = LLMConfig()
-    result = generate_risk_summary(
+    result = await asyncio.to_thread(generate_risk_summary,
         company=req.company,
         risk_score=req.risk_score,
         prediction=req.prediction,
@@ -973,7 +973,7 @@ async def llm_ask(request: Request, req: LLMQuestionRequest):
     from .llm_integration import answer_breach_question, LLMConfig
 
     config = LLMConfig()
-    result = answer_breach_question(
+    result = await asyncio.to_thread(answer_breach_question,
         question=req.question,
         context=req.context,
         config=config,
@@ -995,7 +995,7 @@ async def llm_enrich_records(request: Request, records: list[dict]):
     from .llm_integration import enrich_breach_records, LLMConfig
 
     config = LLMConfig()
-    enriched = enrich_breach_records(records, config=config)
+    enriched = await asyncio.to_thread(enrich_breach_records, records, config=config)
 
     if enriched is None:
         raise HTTPException(
