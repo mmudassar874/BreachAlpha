@@ -35,6 +35,10 @@ def create_search_routes(limiter) -> APIRouter:
             return SearchResponse(query=q, results=[], count=0)
 
         query = q.strip()
+        if len(query) > 100:
+            raise HTTPException(status_code=400, detail="Query too long (max 100 characters).")
+
+        query = q.strip()
         query_lower = query.lower()
         limit = max(1, min(limit, 20))
 

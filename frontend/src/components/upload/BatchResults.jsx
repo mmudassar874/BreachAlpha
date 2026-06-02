@@ -53,7 +53,12 @@ export function BatchResults({ data }) {
   )
 
   const escapeCSV = (val) => {
-    const str = String(val ?? '')
+    let str = String(val ?? '')
+    // Sanitize CSV formula injection: prefix formula characters
+    const trimmed = str.trimStart()
+    if (trimmed.startsWith('=') || trimmed.startsWith('+') || trimmed.startsWith('-') || trimmed.startsWith('@')) {
+      str = '\t' + str
+    }
     if (str.includes(',') || str.includes('"') || str.includes('\n')) {
       return `"${str.replace(/"/g, '""')}"`
     }

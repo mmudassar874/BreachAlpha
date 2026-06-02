@@ -43,6 +43,33 @@ def _get_session():
         return requests.Session(), False
 
 
+# Prompt injection patterns — common attempts to override system instructions
+_INJECTION_PATTERNS = [
+    "ignore all previous instructions",
+    "ignore previous instructions",
+    "disregard all instructions",
+    "disregard previous",
+    "forget everything",
+    "new instructions:",
+    "system prompt:",
+    "you are now",
+    "act as if",
+    "pretend you are",
+    "override your instructions",
+    "jailbreak",
+    "DAN mode",
+]
+
+
+def check_prompt_injection(text: str) -> bool:
+    """Check if text contains common prompt injection patterns.
+
+    Returns True if injection is detected.
+    """
+    text_lower = text.lower()
+    return any(pattern in text_lower for pattern in _INJECTION_PATTERNS)
+
+
 def check_lm_studio(config: LLMConfig = None) -> dict:
     """Check if LM Studio is running and what models are available."""
     if config is None:

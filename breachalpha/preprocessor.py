@@ -214,6 +214,20 @@ def resolve_tickers(df: pd.DataFrame, overrides: dict[str, str] = None, skip: bo
     return df, resolved / len(df) if len(df) > 0 else 0
 
 
+def _sanitize_formula_injection(df: pd.DataFrame) -> None:
+    """Prefix formula characters in string columns to prevent CSV injection.
+
+    Cells starting with =, +, -, @ are interpreted as formulas by Excel.
+    Prefixing with a tab character neutralizes them while keeping the data readable.
+    """
+    formula_prefixes = ("=", "+", "-", "@")
+    for col in df.columns:
+        if df[col].dtype == object:  # string columns only
+            mask = df[col].astype(str).str.strip().str.startswith(formula_prefixes, na=False)
+            if mask.any():
+                df.loc[mask, col] = "\t" + df.loc[mask, col].astype(str)
+
+
 def preprocess_dataset(
     file_path: str | Path,
     config: PreprocessConfig = None,
@@ -274,6 +288,10 @@ def preprocess_dataset(
             columns_detected=columns_detected, column_mapping={},
             ticker_resolution_rate=0, preview=[], errors=["File is empty"],
         )
+
+    # Sanitize CSV formula injection: prefix formula characters to prevent
+    # Excel/Google Sheets from executing them as formulas
+    _sanitize_formula_injection(df)
 
     # Step 2: Map columns
     df, column_mapping, map_warnings = map_columns(df, config.column_mapping)

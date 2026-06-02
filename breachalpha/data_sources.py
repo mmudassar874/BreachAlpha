@@ -27,6 +27,8 @@ from urllib.parse import quote
 import pandas as pd
 import requests
 
+from .core.http import validate_url, SSRFError
+
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path(__file__).parent.parent / "data" / "stock_cache"
@@ -118,6 +120,11 @@ class YFinanceSource(DataSource):
 
         for endpoint in self.ENDPOINTS:
             url = endpoint.format(ticker=quote(ticker))
+            try:
+                validate_url(url)
+            except SSRFError as e:
+                logger.warning("SSRF blocked for ticker %s: %s", ticker, e)
+                break
             for attempt in range(2):
                 try:
                     if is_curl:
@@ -446,6 +453,11 @@ class YahooFinanceScrapeSource(DataSource):
 
         for endpoint in self.ENDPOINTS:
             url = endpoint.format(ticker=quote(ticker))
+            try:
+                validate_url(url)
+            except SSRFError as e:
+                logger.warning("SSRF blocked for ticker %s: %s", ticker, e)
+                break
             try:
                 resp = session.get(url, params=params, timeout=20)
 

@@ -70,7 +70,14 @@ def create_llm_routes(limiter) -> APIRouter:
     @router.post("/api/llm/ask", response_model=LLMAnswerResponse)
     @limiter.limit("10/minute")
     async def llm_ask(request: Request, req: LLMQuestionRequest):
-        from ..llm_integration import answer_breach_question, LLMConfig
+        from ..llm_integration import answer_breach_question, LLMConfig, check_prompt_injection
+
+        if len(req.question) > 5000:
+            raise HTTPException(status_code=400, detail="Question too long (max 5000 characters).")
+        if req.context and len(req.context) > 10000:
+            raise HTTPException(status_code=400, detail="Context too long (max 10000 characters).")
+        if check_prompt_injection(req.question):
+            raise HTTPException(status_code=400, detail="Your question contains patterns that may indicate prompt injection. Please rephrase.")
 
         config = LLMConfig()
         result = await asyncio.to_thread(answer_breach_question,

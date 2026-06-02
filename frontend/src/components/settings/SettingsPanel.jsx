@@ -69,7 +69,7 @@ export function SettingsPanel({ config, setConfig, presets, onLoadPresets }) {
   const testSource = async (sourceName) => {
     setTestResult(null)
     try {
-      const res = await fetch(`${API}/data-sources/test/${sourceName}?ticker=${testTicker}`)
+      const res = await fetch(`${API}/data-sources/test/${encodeURIComponent(sourceName)}?ticker=${encodeURIComponent(testTicker)}`)
       if (!res.ok) {
         let detail = `Server error (${res.status})`
         try {
