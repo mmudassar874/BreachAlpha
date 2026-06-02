@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.2] — 2026-06-02
+
+### Fixed
+- **accessibility**: `text-dim` contrast raised from `#4a5568` to `#708096` (WCAG AA compliance)
+- **accessibility**: Scanline overlay z-index lowered from 9999 to 1 (no longer blocks dropdown/select interactions)
+- **accessibility**: DemoCard nested `<button>` fixed — outer element converted to `<div role="button">` with `aria-label`
+- **accessibility**: ScoreForm labels now have `htmlFor` associations
+- **accessibility**: RiskGauge score has `aria-live="polite"` for screen reader updates
+- **accessibility**: BatchResults table rows respond to Space key (Enter + Space)
+- **responsive**: SettingsPanel CAR Windows grid now `grid-cols-2 sm:grid-cols-4` (mobile-friendly)
+- **UX**: FileUpload buttons show loading spinners during Preview/Analyze
+- **UX**: Footer font size increased from `text-[0.6rem]` to `text-xs`
+- **UX**: SettingsPanel shows empty state when no presets available
+
 ## [0.3.1] — 2026-06-01
 
 ### Fixed

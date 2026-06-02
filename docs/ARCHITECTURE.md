@@ -102,3 +102,10 @@ server.py
 - CORS restricted to localhost:3000
 - Temp file cleanup via try/finally + os.unlink
 - Thread-safe config via app.state (no global env mutation)
+
+### Accessibility
+- WCAG AA compliant contrast ratios (`text-dim` at `#708096` on dark backgrounds)
+- Semantic HTML: `role="button"`, `aria-label`, `aria-expanded`, `aria-live`
+- Keyboard navigation: all interactive elements respond to Enter and Space
+- Responsive grids: `grid-cols-2 sm:grid-cols-4` for mobile breakpoints
+- Form labels associated with inputs via `htmlFor`/`id` pairs
