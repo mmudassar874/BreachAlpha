@@ -12,7 +12,6 @@ Maintains backward compatibility with existing code.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -21,7 +20,6 @@ from .data_sources import DataFetcher, FetcherConfig, get_fetcher
 
 logger = logging.getLogger(__name__)
 
-CACHE_DIR = Path(__file__).parent.parent / "data" / "stock_cache"
 MARKET_INDEX = "^GSPC"
 
 

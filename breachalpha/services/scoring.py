@@ -56,11 +56,11 @@ def resolve_company_name_from_ticker(ticker: str) -> str:
     return ticker
 
 
-async def fetch_breach_data(ticker: str, start_date: str = "2015-01-01") -> tuple[pd.DataFrame, pd.DataFrame]:
+async def fetch_breach_data(ticker: str, start_date: str = "2015-01-01") -> tuple[pd.DataFrame, pd.DataFrame, str]:
     """Fetch stock and market data for a ticker in parallel.
 
     Returns:
-        Tuple of (stock_data, market_data).
+        Tuple of (stock_data, market_data, benchmark).
 
     Raises:
         ValueError: If stock data is empty.

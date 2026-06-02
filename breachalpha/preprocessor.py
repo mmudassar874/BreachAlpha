@@ -40,7 +40,7 @@ DATE_FORMATS = [
 
 
 @dataclass
-class AnalysisConfig:
+class PreprocessConfig:
     """User-configurable preprocessing options."""
     column_mapping: dict[str, str] = field(default_factory=dict)
     date_format: Optional[str] = None
@@ -221,7 +221,7 @@ def resolve_tickers(df: pd.DataFrame, overrides: dict[str, str] = None, skip: bo
 
 def preprocess_dataset(
     file_path: str | Path,
-    config: AnalysisConfig = None,
+    config: PreprocessConfig = None,
 ) -> PreprocessingResult:
     """Full preprocessing pipeline with user controls.
 
@@ -235,7 +235,7 @@ def preprocess_dataset(
     7. Return cleaned dataset + metadata
     """
     if config is None:
-        config = AnalysisConfig()
+        config = PreprocessConfig()
 
     path = Path(file_path)
     errors = []

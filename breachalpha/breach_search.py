@@ -17,100 +17,29 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-# Hardcoded reverse ticker -> company name for well-known companies
-TICKER_TO_NAME: dict[str, str] = {
-    "TATAPOWER": "Tata Power",
-    "TATAMOTORS": "Tata Motors",
-    "RELIANCE": "Reliance Industries",
-    "TCS": "Tata Consultancy Services",
-    "INFY": "Infosys",
-    "HDFCBANK": "HDFC Bank",
-    "ICICIBANK": "ICICI Bank",
-    "SBIN": "State Bank of India",
-    "SBIN.NS": "State Bank of India",
-    "WIPRO": "Wipro",
-    "ITC": "ITC",
-    "LT": "Larsen & Toubro",
-    "BHARTIARTL": "Bharti Airtel",
-    "MARUTI": "Maruti Suzuki",
-    "VEDL": "Vedanta",
-    "VEDL.NS": "Vedanta",
-    "HINDUNILVR": "Hindustan Unilever",
-    "AXISBANK": "Axis Bank",
-    "KOTAKBANK": "Kotak Mahindra Bank",
-    "BAJFINANCE": "Bajaj Finance",
-    "ONGC": "Oil & Natural Gas Corporation",
-    "NTPC": "NTPC",
-    "POWERGRID": "Power Grid Corporation",
-    "SUNPHARMA": "Sun Pharma",
-    "ASIANPAINT": "Asian Paints",
-    "ULTRACEMCO": "UltraTech Cement",
-    "HCLTECH": "HCL Technologies",
-    "ADANIENT": "Adani Enterprises",
-    "ADANIPORTS": "Adani Ports",
-    "JSWSTEEL": "JSW Steel",
-    "TATASTEEL": "Tata Steel",
-    "COALINDIA": "Coal India",
-    "BANKBARODA": "Bank of Baroda",
-    "PNB": "Punjab National Bank",
-    "LIC": "Life Insurance Corporation",
-    "HAL": "Hindustan Aeronautics",
-    "BEL": "Bharat Electronics",
-    "ZOMATO": "Zomato",
-    "MSFT": "Microsoft",
-    "AAPL": "Apple",
-    "GOOGL": "Google",
-    "AMZN": "Amazon",
-    "META": "Meta",
-    "EFX": "Equifax",
-    "COF": "Capital One",
-    "MAR": "Marriott",
-    "NVDA": "NVIDIA",
-    "TSLA": "Tesla",
-    "JPM": "JPMorgan Chase",
-    "BAC": "Bank of America",
-    "WMT": "Walmart",
-    "NFLX": "Netflix",
-    "DIS": "Disney",
-    "V": "Visa",
-    "MA": "Mastercard",
-    "XOM": "Exxon Mobil",
-    "CVX": "Chevron",
-    "T": "AT&T",
-    "VZ": "Verizon",
-}
-
-
 def _resolve_company_name(input_str: str) -> str:
-    """Try to resolve a ticker-like input to a proper company name."""
+    """Try to resolve a ticker-like input to a proper company name.
+
+    Uses the reverse ticker map from ticker_resolver (single source of truth).
+    """
     import re
+    from .ticker_resolver import KNOWN_TICKERS
+
     cleaned = input_str.strip().upper()
-    # Strip exchange suffix
     bare = re.sub(r"\.(NS|BO|NSE|BSE|L|DE|TO|HK|SS|SZ)$", "", cleaned)
 
-    # Try full input first
-    if cleaned in TICKER_TO_NAME:
-        return TICKER_TO_NAME[cleaned]
+    # Build reverse map: ticker -> company name
+    rev: dict[str, str] = {}
+    for name, ticker in KNOWN_TICKERS.items():
+        if ticker:
+            rev[ticker.upper()] = name.title()
+            t_bare = re.sub(r"\.(NS|BO|NSE|BSE|L|DE|TO|HK|SS|SZ)$", "", ticker.upper())
+            rev[t_bare] = name.title()
 
-    # Try bare ticker
-    if bare in TICKER_TO_NAME:
-        return TICKER_TO_NAME[bare]
-
-    # Try importing KNOWN_TICKERS reverse map from ticker_resolver
-    try:
-        from .ticker_resolver import KNOWN_TICKERS
-        rev: dict[str, str] = {}
-        for name, ticker in KNOWN_TICKERS.items():
-            if ticker:
-                rev[ticker.upper()] = name.title()
-                t_bare = re.sub(r"\.(NS|BO|NSE|BSE|L|DE|TO|HK|SS|SZ)$", "", ticker.upper())
-                rev[t_bare] = name.title()
-        if cleaned in rev:
-            return rev[cleaned]
-        if bare in rev:
-            return rev[bare]
-    except Exception:
-        pass
+    if cleaned in rev:
+        return rev[cleaned]
+    if bare in rev:
+        return rev[bare]
 
     return input_str
 

@@ -1,0 +1,29 @@
+
+> frontend@0.0.0 dev
+> vite
+
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m1433[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m3000[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[2m9:52:27 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m9:53:27 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/Header.jsx, /src/index.css[22m
+[2m9:53:37 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/TabBar.jsx, /src/index.css[22m
+[2m9:53:53 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/layout/Footer.jsx, /src/index.css[22m
+[2m9:54:07 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/score/RiskGauge.jsx, /src/index.css[22m
+[2m9:54:17 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/score/FeatureCard.jsx, /src/index.css[22m
+[2m9:54:30 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/score/ProbabilityBar.jsx, /src/index.css[22m
+[2m9:55:49 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
+[2m9:56:24 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/score/FeaturesChart.jsx, /src/index.css[22m
+[2m9:56:59 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/score/ScoreForm.jsx, /src/index.css[22m
+[2m9:57:44 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/upload/FileUpload.jsx, /src/index.css[22m
+[2m9:58:00 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/upload/DatasetPreview.jsx, /src/index.css[22m
+[2m9:58:34 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/upload/BatchResults.jsx, /src/index.css[22m
+[2m9:59:09 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/explain/ExplainabilityPanel.jsx, /src/index.css[22m
+[2m9:59:25 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/demos/DemoCard.jsx, /src/index.css[22m
+[2m9:59:53 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/llm/LLMAnalysisPanel.jsx, /src/index.css[22m
+[2m10:01:00 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/settings/SettingsPanel.jsx, /src/index.css[22m
+[2m10:01:54 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mdist/index.html[22m
+[2m10:01:55 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mdist/index.html[22m
+[2m10:01:55 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mdist/index.html[22m

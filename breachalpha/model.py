@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -137,8 +138,9 @@ def save_model(model: xgb.XGBClassifier, metrics: dict, name: str = "breachalpha
     return model_path
 
 
+@lru_cache(maxsize=1)
 def load_model(name: str = "breachalpha_model") -> Optional[xgb.XGBClassifier]:
-    """Load a trained model from disk."""
+    """Load a trained model from disk. Cached — loaded once per process."""
     model_path = MODEL_DIR / f"{name}.json"
     if not model_path.exists():
         logger.warning("Model not found: %s", model_path)

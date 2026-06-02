@@ -48,7 +48,7 @@ from .stock_loader import (
     get_cache_info, clear_cache, get_data_sources_status,
 )
 from .ticker_resolver import resolve_ticker, detect_benchmark
-from .preprocessor import preprocess_dataset, PreprocessingResult, AnalysisConfig as PreprocessConfig
+from .preprocessor import preprocess_dataset, PreprocessingResult, PreprocessConfig
 from .explainability import generate_explanation, ExplainabilityReport
 from .data_sources import DataFetcher, FetcherConfig
 from .core.constants import (
@@ -97,9 +97,14 @@ limiter = Limiter(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+_CORS_ORIGINS = os.environ.get(
+    "BREACHALPHA_CORS_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000",
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-Admin-Key"],
@@ -722,7 +727,6 @@ async def test_data_source(request: Request, source_name: str, ticker: str = "MS
         fetcher = DataFetcher(FetcherConfig(
             alpha_vantage_key=os.environ.get("ALPHA_VANTAGE_API_KEY", ""),
         ))
-        import time
         start_time = time.time()
         try:
             df = await asyncio.to_thread(fetcher.fetch, ticker, start="2024-01-01")
@@ -769,7 +773,6 @@ async def test_data_source(request: Request, source_name: str, ticker: str = "MS
         raise HTTPException(status_code=400, detail=f"Source {source_name} does not support ticker {ticker}")
 
     try:
-        import time
         start_time = time.time()
         df = await asyncio.to_thread(source.fetch, ticker, start="2024-01-01")
         elapsed = time.time() - start_time
@@ -1220,6 +1223,89 @@ async def upload_analyze_with_config(request: Request, file: UploadFile = File(.
     failed = sum(1 for r in all_results if r.status in ("failed", "skipped"))
 
     return BatchResponse(total=len(all_results), analyzed=analyzed, failed=failed, results=all_results)
+
+
+def _run_analysis_pipeline(preprocess_result) -> list[dict]:
+    """Run batch analysis on preprocessed dataset. Used by /api/upload/analyze."""
+    df = preprocess_result.df
+
+    tickers = [str(t) for t in df["ticker"].dropna().unique() if t]
+    stock_cache = fetch_stock_batch(tickers, start="2010-01-01")
+
+    model = get_or_train_model()
+
+    events = []
+    skipped = []
+    for _, row in df.iterrows():
+        company = str(row.get("company_name", ""))
+        ticker = str(row.get("ticker", ""))
+        breach_date = row.get("breach_date")
+        records = int(row.get("records_affected", 0))
+        breach_type = str(row.get("breach_type", "data_leak"))
+
+        if not company or pd.isna(breach_date) or not ticker or ticker == "nan":
+            skipped.append({
+                "company": company, "ticker": ticker or "N/A",
+                "breach_date": str(breach_date)[:10] if not pd.isna(breach_date) else "N/A",
+                "records_affected": records, "breach_type": breach_type,
+                "risk_score": 0, "prediction": "unknown", "confidence": 0,
+                "probabilities": {}, "status": "skipped",
+                "error": "Missing company, date, or ticker",
+            })
+            continue
+
+        stock_data = stock_cache.get(ticker, pd.DataFrame())
+        if stock_data.empty:
+            skipped.append({
+                "company": company, "ticker": ticker,
+                "breach_date": str(breach_date)[:10],
+                "records_affected": records, "breach_type": breach_type,
+                "risk_score": 0, "prediction": "unknown", "confidence": 0,
+                "probabilities": {}, "status": "failed",
+                "error": f"No stock data for {ticker}",
+            })
+            continue
+
+        bm = detect_benchmark(ticker)
+        market_data = fetch_market_data(start="2010-01-01", benchmark=bm)
+        events.append(BreachEvent(
+            company_name=company, ticker=ticker,
+            breach_date=pd.Timestamp(breach_date),
+            pwn_count=records, breach_type=breach_type,
+            stock_data=stock_data, market_data=market_data,
+            benchmark=bm,
+        ))
+
+    features_df = compute_features_batch(events)
+
+    results = []
+    for _, feat_row in features_df.iterrows():
+        features_dict = feat_row.to_dict()
+        features_df_single = pd.DataFrame([features_dict])
+        try:
+            pred = predict_severity(model, features_df_single)
+            results.append({
+                "company": features_dict["company_name"],
+                "ticker": features_dict["ticker"],
+                "breach_date": features_dict["breach_date"],
+                "records_affected": int(features_dict["pwn_count"]),
+                "breach_type": features_dict["breach_type"],
+                "risk_score": pred["risk_score"], "prediction": pred["prediction"],
+                "confidence": pred["confidence"], "probabilities": pred["probabilities"],
+                "status": "ok",
+            })
+        except Exception as e:
+            results.append({
+                "company": features_dict.get("company_name", "?"),
+                "ticker": features_dict.get("ticker", "?"),
+                "breach_date": features_dict.get("breach_date", "?"),
+                "records_affected": int(features_dict.get("pwn_count", 0)),
+                "breach_type": features_dict.get("breach_type", "?"),
+                "risk_score": 0, "prediction": "error", "confidence": 0,
+                "probabilities": {}, "status": "failed", "error": str(e),
+            })
+
+    return results + skipped
 
 
 # ── Static File Serving (Production) ──────────────────────────────────────

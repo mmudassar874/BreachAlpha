@@ -1,0 +1,16 @@
+INFO:     Will watch for changes in these directories: ['D:\\New folder (2)']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [25480] using StatReload
+INFO:     Started server process [25904]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'breachalpha\server.py'. Reloading...
+      Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [25100]
+INFO:     Started server process [15028]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'breachalpha\server.py'. Reloading...
+ 

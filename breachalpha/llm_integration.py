@@ -12,14 +12,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# LM Studio default endpoint (user's local instance)
-DEFAULT_LM_STUDIO_URL = "http://192.168.56.1:1234/v1"
+# LM Studio default endpoint — configurable via BREACHALPHA_LLM_URL env var
+DEFAULT_LM_STUDIO_URL = os.environ.get("BREACHALPHA_LLM_URL", "http://192.168.56.1:1234/v1")
 
 
 @dataclass
