@@ -2,7 +2,15 @@
 
 Quantify the financial impact of cybersecurity incidents on publicly traded companies.
 
-BreachAlpha uses **event study methodology** (MacKinlay, 1997) to measure how breaches move stock prices. Feed it a company name and breach details — it fetches historical prices, isolates the breach-specific abnormal return, and predicts severity with an XGBoost classifier.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)](https://react.dev/)
+[![XGBoost](https://img.shields.io/badge/XGBoost-EC4B3E?)](https://xgboost.readthedocs.io/)
+[![Tests](https://img.shields.io/badge/tests-144%20passing-brightgreen)](https://github.com/AshayK003/BreachAlpha)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/AshayK003/BreachAlpha?logo=github)](https://github.com/AshayK003/BreachAlpha)
+
+BreachAlpha uses **event study methodology** (MacKinlay, 1997) to measure how breaches move stock prices.
 
 ```
 Company: Equifax (EFX)          Breach: 2017-09-07
